@@ -180,9 +180,11 @@ function glyphStrokes(ch){
       )];
       case 6: return [ makeArc(cx, cy+s*0.25, s*0.65, Math.PI/3, Math.PI*2.05) ];
       case 7: return [
-        makeLine(cx - s*0.6, cy - s*1.0, cx + s*0.6, cy - s*1.0),
-        makeLine(cx + s*0.55, cy - s*1.0, cx - s*0.25, cy + s*0.9),
-        makeLine(cx - s*0.6, cy - s*0.2, cx + s*0.6, cy - s*0.2),
+        concatStroke(
+          makeLine(cx - s*0.6, cy - s*1.0, cx + s*0.6, cy - s*1.0),
+          makeLine(cx + s*0.6, cy - s*1.0, cx - s*0.6, cy + s*0.9)
+        ),
+        makeLine(cx - s*0.4, cy - s*0.2, cx + s*0.4, cy - s*0.2),
       ];
       case 8: return [ eightPath(cx, cy, s*0.38, s*0.5) ];
       case 9: return [ concatStroke(
@@ -288,11 +290,11 @@ function glyphStrokes(ch){
       ),
     ];
     case 'S': {
-      const p0x = x + s*0.35, p0y = y - s*0.6;
-      const c1x = x + s*0.35, c1y = y - s*0.35;
-      const p1x = x - s*0.35, p1y = y - s*0.05;
-      const c2x = x - s*0.35, c2y = y + s*0.35;
-      const p2x = x + s*0.35, p2y = y + s*0.6;
+      const p0x = x - s*0.35, p0y = y - s*0.6;
+      const c1x = x - s*0.35, c1y = y - s*0.35;
+      const p1x = x + s*0.35, p1y = y - s*0.05;
+      const c2x = x + s*0.35, c2y = y + s*0.35;
+      const p2x = x - s*0.35, p2y = y + s*0.6;
       return [ concatStroke(
         makeQ(p0x,p0y, c1x,c1y, p1x,p1y, 48),
         makeQ(p1x,p1y, c2x,c2y, p2x,p2y, 48)
