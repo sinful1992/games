@@ -286,11 +286,12 @@ function glyphStrokes(ch){
       ),
     ];
     case 'S': {
-      const p0x = x + s*0.35, p0y = y - s*0.6;
+      // Start at top-left, bulge right, then finish at bottom-left for a natural S stroke
+      const p0x = x - s*0.35, p0y = y - s*0.6;
       const c1x = x + s*0.35, c1y = y - s*0.35;
-      const p1x = x - s*0.35, p1y = y - s*0.05;
+      const p1x = x + s*0.35, p1y = y - s*0.05;
       const c2x = x - s*0.35, c2y = y + s*0.35;
-      const p2x = x + s*0.35, p2y = y + s*0.6;
+      const p2x = x - s*0.35, p2y = y + s*0.6;
       return [ concatStroke(
         makeQ(p0x,p0y, c1x,c1y, p1x,p1y, 48),
         makeQ(p1x,p1y, c2x,c2y, p2x,p2y, 48)
