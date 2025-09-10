@@ -151,9 +151,9 @@ function glyphStrokes(ch){
 
   if(typeof ch==='number'){
     switch(ch){
-      case 0: return [ makeArc(cx,cy,s*0.7, 0, Math.PI*2) ];
+      case 0: return [ makeArc(cx,cy,s*0.7, Math.PI*1.5, Math.PI*3.5) ];
       case 1: return [ concatStroke(
-        makeLine(cx - s*0.25, cy - s*0.8, cx, cy - s*1.0),
+        makeLine(cx, cy - s*1.0, cx - s*0.25, cy - s*0.8),
         makeLine(cx, cy - s*1.0, cx, cy + s*0.85)
       )];
       case 2: return [ concatStroke(
@@ -174,7 +174,7 @@ function glyphStrokes(ch){
         makeLine(cx + s*0.5, cy - s*1.0, cx + s*0.5, cy + s*0.9),
       ];
       case 5: return [ concatStroke(
-        makeLine(cx + s*0.5, cy - s*1.0, cx - s*0.5, cy - s*1.0),
+        makeLine(cx - s*0.5, cy - s*1.0, cx + s*0.5, cy - s*1.0),
         makeLine(cx - s*0.5, cy - s*1.0, cx - s*0.5, cy - s*0.1),
         makeArc(cx, cy, s*0.55, Math.PI, Math.PI*2)
       )];
@@ -188,7 +188,7 @@ function glyphStrokes(ch){
       ];
       case 8: return [ eightPath(cx, cy, s*0.38, s*0.5) ];
       case 9: return [ concatStroke(
-        makeArc(cx, cy - s*0.35, s*0.5, 0, Math.PI*2),
+        makeArc(cx, cy - s*0.35, s*0.5, Math.PI*1.5, Math.PI*3.5),
         makeLine(cx + s*0.5, cy - s*0.35, cx + s*0.5, cy + s*0.9)
       )];
     }
@@ -197,7 +197,7 @@ function glyphStrokes(ch){
   const x = cx, y = cy;
   switch(ch){
     case 'A': return [
-      makeLine(x-s*0.5, y+s*0.8, x, y-s*0.9),
+      makeLine(x, y-s*0.9, x-s*0.5, y+s*0.8),
       makeLine(x, y-s*0.9, x+s*0.5, y+s*0.8),
       makeLine(x-s*0.25, y - s*0.1, x+s*0.25, y - s*0.1),
     ];
@@ -208,10 +208,10 @@ function glyphStrokes(ch){
         makeArc(x-s*0.45 + s*0.35, y+s*0.35, s*0.35, Math.PI, Math.PI*2)
       ),
     ];
-    case 'C': return [ makeArc(x, y, s*0.75, Math.PI*0.25, Math.PI*1.75) ];
+    case 'C': return [ makeArc(x, y, s*0.75, Math.PI*1.5, Math.PI*0.5) ];
     case 'D': return [
       makeLine(x-s*0.45, y-s*0.9, x-s*0.45, y+s*0.9),
-      makeArc(x-s*0.45 + s*0.4, y, s*0.85, Math.PI*0.5, -Math.PI*0.5),
+      makeArc(x-s*0.45 + s*0.4, y, s*0.85, Math.PI*1.5, Math.PI*0.5),
     ];
     case 'E': return [
       makeLine(x-s*0.45, y-s*0.9, x-s*0.45, y+s*0.9),
@@ -225,9 +225,9 @@ function glyphStrokes(ch){
       makeLine(x-s*0.45, y, x+s*0.3, y),
     ];
     case 'G': return [ concatStroke(
-      makeArc(x, y, s*0.75, Math.PI*0.25, Math.PI*1.75),
-      makeLine(x - s*0.53, y, x+s*0.2, y),
-      makeLine(x+s*0.2, y, x+s*0.2, y+s*0.3)
+      makeArc(x, y, s*0.75, Math.PI*1.5, Math.PI*0.35),
+      makeLine(x+s*0.53, y-s*0.05, x+s*0.2, y-s*0.05),
+      makeLine(x+s*0.2, y-s*0.05, x+s*0.2, y+s*0.3)
     )];
     case 'H': return [
       makeLine(x-s*0.5, y-s*0.9, x-s*0.5, y+s*0.9),
@@ -257,35 +257,33 @@ function glyphStrokes(ch){
       makeLine(x-s*0.2, y+s*0.9, x+s*0.5, y+s*0.9)
     )];
     case 'M': return [
-      makeLine(x-s*0.6, y+s*0.9, x-s*0.6, y-s*0.9),
+      makeLine(x-s*0.6, y-s*0.9, x-s*0.6, y+s*0.9),
       concatStroke(
-        makeLine(x-s*0.6, y-s*0.9, x, y-s*0.2),
-        makeLine(x, y-s*0.2, x, y+s*0.9),
-        makeLine(x, y+s*0.9, x, y-s*0.2),
-        makeLine(x, y-s*0.2, x+s*0.6, y-s*0.9),
+        makeLine(x-s*0.6, y-s*0.9, x, y+s*0.9),
+        makeLine(x, y+s*0.9, x+s*0.6, y-s*0.9),
         makeLine(x+s*0.6, y-s*0.9, x+s*0.6, y+s*0.9)
       ),
     ];
     case 'N': return [
-      makeLine(x-s*0.6, y+s*0.9, x-s*0.6, y-s*0.9),
+      makeLine(x-s*0.6, y-s*0.9, x-s*0.6, y+s*0.9),
       concatStroke(
         makeLine(x-s*0.6, y-s*0.9, x+s*0.6, y+s*0.9),
         makeLine(x+s*0.6, y+s*0.9, x+s*0.6, y-s*0.9)
       ),
     ];
-    case 'O': return [ makeArc(x, y, s*0.8, 0, Math.PI*2) ];
+    case 'O': return [ makeArc(x, y, s*0.8, Math.PI*1.5, Math.PI*3.5) ];
     case 'P': return [
       makeLine(x-s*0.45, y-s*0.9, x-s*0.45, y+s*0.9),
-      makeArc(x-s*0.45 + s*0.35, y-s*0.35, s*0.35, Math.PI, Math.PI*2),
+      makeArc(x-s*0.45 + s*0.35, y-s*0.35, s*0.35, -Math.PI/2, Math.PI/2),
     ];
     case 'Q': return [
-      makeArc(x, y, s*0.8, 0, Math.PI*2),
+      makeArc(x, y, s*0.8, Math.PI*1.5, Math.PI*3.5),
       makeLine(x+s*0.2, y+s*0.4, x+s*0.5, y+s*1.0),
     ];
     case 'R': return [
       makeLine(x-s*0.45, y-s*0.9, x-s*0.45, y+s*0.9),
       concatStroke(
-        makeArc(x-s*0.45 + s*0.35, y-s*0.35, s*0.35, Math.PI, Math.PI*2),
+        makeArc(x-s*0.45 + s*0.35, y-s*0.35, s*0.35, -Math.PI/2, Math.PI/2),
         makeLine(x-s*0.1, y, x+s*0.5, y+s*0.9)
       ),
     ];
