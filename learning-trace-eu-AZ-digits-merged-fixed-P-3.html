@@ -180,9 +180,11 @@ function glyphStrokes(ch){
       )];
       case 6: return [ makeArc(cx, cy+s*0.25, s*0.65, Math.PI/3, Math.PI*2.05) ];
       case 7: return [
-        makeLine(cx - s*0.6, cy - s*1.0, cx + s*0.6, cy - s*1.0),
-        makeLine(cx + s*0.55, cy - s*1.0, cx - s*0.25, cy + s*0.9),
-        makeLine(cx - s*0.6, cy - s*0.2, cx + s*0.6, cy - s*0.2),
+        concatStroke(
+          makeLine(cx - s*0.6, cy - s*1.0, cx + s*0.6, cy - s*1.0),
+          makeLine(cx + s*0.6, cy - s*1.0, cx - s*0.6, cy + s*0.9)
+        ),
+        makeLine(cx - s*0.4, cy - s*0.2, cx + s*0.4, cy - s*0.2),
       ];
       case 8: return [ eightPath(cx, cy, s*0.38, s*0.5) ];
       case 9: return [ concatStroke(
@@ -288,11 +290,11 @@ function glyphStrokes(ch){
       ),
     ];
     case 'S': {
-      const p0x = x + s*0.35, p0y = y - s*0.6;
-      const c1x = x + s*0.35, c1y = y - s*0.35;
-      const p1x = x - s*0.35, p1y = y - s*0.05;
-      const c2x = x - s*0.35, c2y = y + s*0.35;
-      const p2x = x + s*0.35, p2y = y + s*0.6;
+      const p0x = x - s*0.35, p0y = y - s*0.6;
+      const c1x = x - s*0.35, c1y = y - s*0.35;
+      const p1x = x + s*0.35, p1y = y - s*0.05;
+      const c2x = x + s*0.35, c2y = y + s*0.35;
+      const p2x = x - s*0.35, p2y = y + s*0.6;
       return [ concatStroke(
         makeQ(p0x,p0y, c1x,c1y, p1x,p1y, 48),
         makeQ(p1x,p1y, c2x,c2y, p2x,p2y, 48)
@@ -416,6 +418,18 @@ function drawCount(){
   }
 }
 
+function drawHandStroke(pts, endIdx){
+  for(let i=1; i<=endIdx && i<pts.length; i++){
+    const t = i / pts.length;
+    const w = (18 + 8*Math.sin(Math.PI*t)) * screenScale;
+    ctx.lineWidth = w;
+    ctx.beginPath();
+    ctx.moveTo(pts[i-1].x, pts[i-1].y);
+    ctx.lineTo(pts[i].x, pts[i].y);
+    ctx.stroke();
+  }
+}
+
 function drawTrace(){
   if(!tracingStrokes.length) return;
 
@@ -423,7 +437,7 @@ function drawTrace(){
 
   // light guides
   ctx.lineWidth=26*screenScale;
-  ctx.strokeStyle='rgba(200,200,200,.35)'; 
+  ctx.strokeStyle='rgba(200,200,200,.35)';
   for(const pts of tracingStrokes){
     if(!pts.length) continue;
     ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y);
@@ -432,32 +446,19 @@ function drawTrace(){
   }
 
   // completed strokes
-  ctx.strokeStyle='#00CED1';
-  ctx.shadowColor='#FFD700'; 
-  ctx.shadowBlur=10;
-  ctx.lineWidth=22*screenScale; 
+  ctx.strokeStyle='#333';
   for(let s=0; s<completedStrokes; s++){
     const pts=tracingStrokes[s];
     if(!pts.length) continue;
-    ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y);
-    for(let i=1;i<pts.length;i++) ctx.lineTo(pts[i].x, pts[i].y);
-    ctx.stroke();
+    drawHandStroke(pts, pts.length-1);
   }
-  ctx.shadowBlur=0;
 
   // current stroke
   if(strokeIdx < tracingStrokes.length){
     const pts = tracingStrokes[strokeIdx];
     if(pts.length){
-      ctx.strokeStyle='#00CED1'; 
-      ctx.lineWidth=22*screenScale; 
-      ctx.shadowColor='#FFD700'; 
-      ctx.shadowBlur=10;
-      ctx.beginPath();
-      ctx.moveTo(pts[0].x, pts[0].y);
-      for(let i=1;i<=pointIdx && i<pts.length;i++) ctx.lineTo(pts[i].x, pts[i].y);
-      ctx.stroke();
-      ctx.shadowBlur=0;
+      ctx.strokeStyle='#333';
+      drawHandStroke(pts, pointIdx);
 
       // Start & end dots for current stroke only
       ctx.fillStyle='#4CAF50';
