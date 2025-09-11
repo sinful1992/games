@@ -140,12 +140,21 @@ function makeQ(x0,y0,cx,cy,x1,y1,seg=48){
   return pts;
 }
 function eightPath(cx, cy, rt, rb){
-  const topC = {x:cx, y:cy - rt - rb*0.05};
-  const botC = {x:cx, y:cy + rb + rt*0.05};
-  const startAngle = 0;
-  const top = makeArc(topC.x, topC.y, rt, startAngle, startAngle + Math.PI*2);
-  const bot = makeArc(botC.x, botC.y, rb, startAngle, startAngle - Math.PI*2);
-  return concatStroke(top, bot);
+  // Create a proper figure-8 with smooth connections
+  const topY = cy - rt - rb*0.1;
+  const botY = cy + rb + rt*0.1;
+  const crossY = cy;
+  
+  return concatStroke(
+    // Start at top center, go around top circle
+    makeArc(cx, topY, rt, -Math.PI/2, Math.PI*1.5),
+    // Connect to bottom circle at crossing point
+    makeLine(cx + rt, topY, cx - rb, botY),
+    // Go around bottom circle
+    makeArc(cx, botY, rb, Math.PI/2, -Math.PI*1.5),
+    // Return to start
+    makeLine(cx - rb, botY, cx, topY - rt)
+  );
 }
 
 // ===== glyphStrokes (original merged version) =====
@@ -210,8 +219,12 @@ function glyphStrokes(ch){
     ];
     case 'C': return [ makeArc(x, y, s*0.75, Math.PI*1.5, Math.PI*0.5) ];
     case 'D': return [
-      makeLine(x-s*0.45, y-s*0.9, x-s*0.45, y+s*0.9),
-      makeArc(x-s*0.45 + s*0.4, y, s*0.85, Math.PI*1.5, Math.PI*0.5),
+      concatStroke(
+        makeLine(x-s*0.45, y-s*0.9, x-s*0.45, y+s*0.9),
+        makeLine(x-s*0.45, y+s*0.9, x+s*0.3, y+s*0.9),
+        makeArc(x+s*0.3, y, s*0.9, Math.PI/2, -Math.PI/2),
+        makeLine(x+s*0.3, y-s*0.9, x-s*0.45, y-s*0.9)
+      ),
     ];
     case 'E': return [
       makeLine(x-s*0.45, y-s*0.9, x-s*0.45, y+s*0.9),
@@ -579,7 +592,7 @@ function getStrokeWidth() {
 }
 
 // Coverage detection settings
-const COVERAGE_THRESHOLD = 0.7; // 70% coverage required
+const COVERAGE_THRESHOLD = 0.85; // 85% coverage required
 const SAMPLE_DISTANCE = 8; // Distance between coverage samples
 
 // Enhanced tracing with coverage detection
@@ -641,15 +654,25 @@ function updateCoverage() {
 function checkCompletion() {
   let totalCovered = 0;
   let totalSamples = 0;
+  let strokesWithMinimumCoverage = 0;
   
   for (const coverage of tracingCoverage) {
-    totalSamples += coverage.length;
-    totalCovered += coverage.filter(c => c).length;
+    const strokeCovered = coverage.filter(c => c).length;
+    const strokeTotal = coverage.length;
+    totalSamples += strokeTotal;
+    totalCovered += strokeCovered;
+    
+    // Each stroke needs at least 75% coverage
+    if (strokeTotal > 0 && (strokeCovered / strokeTotal) >= 0.75) {
+      strokesWithMinimumCoverage++;
+    }
   }
   
   const coverageRatio = totalSamples > 0 ? totalCovered / totalSamples : 0;
+  const allStrokesMinimumCovered = strokesWithMinimumCoverage === tracingStrokes.length;
   
-  if (coverageRatio >= COVERAGE_THRESHOLD) {
+  // Need both high overall coverage AND minimum coverage on each stroke
+  if (coverageRatio >= COVERAGE_THRESHOLD && allStrokesMinimumCovered) {
     sOK();
     burst(window.innerWidth/2, window.innerHeight/2, 24);
     addScore(15);
