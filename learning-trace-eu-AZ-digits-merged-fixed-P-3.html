@@ -162,7 +162,13 @@ function glyphStrokes(ch){
 
   if(typeof ch==='number'){
     switch(ch){
-      case 0: return [ makeArc(cx,cy,s*0.7, Math.PI*1.5, Math.PI*3.5) ];
+      case 0: return [ concatStroke(
+        // Create more oval/elongated shape for number 0
+        makeArc(cx, cy-s*0.2, s*0.5, Math.PI, Math.PI*1.5),  // top left
+        makeArc(cx, cy-s*0.2, s*0.5, Math.PI*1.5, 0),        // top right  
+        makeArc(cx, cy+s*0.2, s*0.5, 0, Math.PI*0.5),        // bottom right
+        makeArc(cx, cy+s*0.2, s*0.5, Math.PI*0.5, Math.PI)   // bottom left
+      )];
       case 1: return [ concatStroke(
         makeLine(cx, cy - s*1.0, cx - s*0.25, cy - s*0.8),
         makeLine(cx, cy - s*1.0, cx, cy + s*0.85)
@@ -228,11 +234,21 @@ function glyphStrokes(ch){
       makeLine(x, y-s*0.9, x+s*0.5, y+s*0.8),
       makeLine(x-s*0.25, y - s*0.1, x+s*0.25, y - s*0.1),
     ];
-    case 'B': return [
+    case 'B': return [ concatStroke(
+      // Start with vertical line
       makeLine(x-s*0.45, y-s*0.9, x-s*0.45, y+s*0.9),
-      makeArc(x-s*0.1, y-s*0.45, s*0.35, -Math.PI/2, Math.PI/2),
-      makeArc(x-s*0.1, y+s*0.45, s*0.35, -Math.PI/2, Math.PI/2),
-    ];
+      // Top horizontal line
+      makeLine(x-s*0.45, y-s*0.9, x+s*0.25, y-s*0.9),
+      // Top right curve
+      makeArc(x+s*0.25, y-s*0.6, s*0.3, -Math.PI/2, Math.PI/2),
+      // Middle connecting line
+      makeLine(x+s*0.25, y-s*0.3, x-s*0.45, y-s*0.3),
+      makeLine(x-s*0.45, y-s*0.3, x+s*0.3, y-s*0.3),
+      // Bottom right curve  
+      makeArc(x+s*0.3, y+s*0.15, s*0.45, -Math.PI/2, Math.PI/2),
+      // Bottom horizontal line
+      makeLine(x+s*0.3, y+s*0.6, x-s*0.45, y+s*0.9)
+    )];
     case 'C': return [ makeArc(x, y, s*0.7, Math.PI*0.75, Math.PI*1.25) ];
     case 'D': return [
       concatStroke(
@@ -254,9 +270,12 @@ function glyphStrokes(ch){
       makeLine(x-s*0.45, y, x+s*0.3, y),
     ];
     case 'G': return [ concatStroke(
-      makeArc(x, y, s*0.75, Math.PI*1.5, Math.PI*0.35),
-      makeLine(x+s*0.53, y-s*0.05, x+s*0.2, y-s*0.05),
-      makeLine(x+s*0.2, y-s*0.05, x+s*0.2, y+s*0.3)
+      // Start at top right, curve around like a C
+      makeArc(x, y, s*0.65, -Math.PI*0.25, Math.PI*1.25),
+      // Horizontal line inward (the G's "bar")
+      makeLine(x+s*0.46, y, x+s*0.25, y),
+      // Small vertical line down
+      makeLine(x+s*0.25, y, x+s*0.25, y+s*0.35)
     )];
     case 'H': return [
       makeLine(x-s*0.5, y-s*0.9, x-s*0.5, y+s*0.9),
