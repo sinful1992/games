@@ -58,6 +58,11 @@ let pointerDown=false;
 let currentNumber=1, currentLetter=0, tracingSet='numbers';
 const lettersList='ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
 
+// Enhanced tracing state
+let userStrokes = [];  // User's drawn strokes
+let currentUserStroke = [];  // Current stroke being drawn
+let tracingCoverage = [];  // Coverage map for each target stroke
+
 // No-repeat queues
 const RECENT_LEN=3; const recentNumbers=[]; const recentLetters=[]; const recentCounts=[];
 function pushRecent(arr,v){arr.push(v); while(arr.length>RECENT_LEN) arr.shift();}
@@ -169,8 +174,8 @@ function glyphStrokes(ch){
         makeQ(cx + s*0.35, cy + s*0.35,  cx + s*0.30, cy + s*0.80,  cx - s*0.40, cy + s*0.80, 40)
       )];
       case 4: return [
-        makeLine(cx - s*0.5, cy - s*1.0, cx - s*0.5, cy + s*0.9),
-        makeLine(cx - s*0.5, cy - s*0.1, cx + s*0.5, cy - s*0.1),
+        makeLine(cx - s*0.4, cy - s*1.0, cx - s*0.4, cy - s*0.1),
+        makeLine(cx - s*0.4, cy - s*0.1, cx + s*0.5, cy - s*0.1),
         makeLine(cx + s*0.5, cy - s*1.0, cx + s*0.5, cy + s*0.9),
       ];
       case 5: return [ concatStroke(
@@ -180,11 +185,8 @@ function glyphStrokes(ch){
       )];
       case 6: return [ makeArc(cx, cy+s*0.25, s*0.65, Math.PI/3, Math.PI*2.05) ];
       case 7: return [
-        concatStroke(
-          makeLine(cx - s*0.6, cy - s*1.0, cx + s*0.6, cy - s*1.0),
-          makeLine(cx + s*0.6, cy - s*1.0, cx - s*0.6, cy + s*0.9)
-        ),
-        makeLine(cx - s*0.4, cy - s*0.2, cx + s*0.4, cy - s*0.2),
+        makeLine(cx - s*0.5, cy - s*1.0, cx + s*0.5, cy - s*1.0),
+        makeLine(cx + s*0.5, cy - s*1.0, cx - s*0.3, cy + s*0.9),
       ];
       case 8: return [ eightPath(cx, cy, s*0.38, s*0.5) ];
       case 9: return [ concatStroke(
@@ -203,10 +205,8 @@ function glyphStrokes(ch){
     ];
     case 'B': return [
       makeLine(x-s*0.45, y-s*0.9, x-s*0.45, y+s*0.9),
-      concatStroke(
-        makeArc(x-s*0.45 + s*0.35, y-s*0.35, s*0.35, Math.PI, Math.PI*2),
-        makeArc(x-s*0.45 + s*0.35, y+s*0.35, s*0.35, Math.PI, Math.PI*2)
-      ),
+      makeArc(x-s*0.1, y-s*0.45, s*0.35, -Math.PI/2, Math.PI/2),
+      makeArc(x-s*0.1, y+s*0.45, s*0.35, -Math.PI/2, Math.PI/2),
     ];
     case 'C': return [ makeArc(x, y, s*0.75, Math.PI*1.5, Math.PI*0.5) ];
     case 'D': return [
@@ -274,7 +274,11 @@ function glyphStrokes(ch){
     case 'O': return [ makeArc(x, y, s*0.8, Math.PI*1.5, Math.PI*3.5) ];
     case 'P': return [
       makeLine(x-s*0.45, y-s*0.9, x-s*0.45, y+s*0.9),
-      makeArc(x-s*0.45 + s*0.35, y-s*0.35, s*0.35, -Math.PI/2, Math.PI/2),
+      concatStroke(
+        makeLine(x-s*0.45, y-s*0.9, x+s*0.3, y-s*0.9),
+        makeArc(x, y-s*0.35, s*0.35, -Math.PI/2, Math.PI/2),
+        makeLine(x+s*0.3, y+s*0.2, x-s*0.45, y+s*0.2)
+      ),
     ];
     case 'Q': return [
       makeArc(x, y, s*0.8, Math.PI*1.5, Math.PI*3.5),
@@ -283,9 +287,11 @@ function glyphStrokes(ch){
     case 'R': return [
       makeLine(x-s*0.45, y-s*0.9, x-s*0.45, y+s*0.9),
       concatStroke(
-        makeArc(x-s*0.45 + s*0.35, y-s*0.35, s*0.35, -Math.PI/2, Math.PI/2),
-        makeLine(x-s*0.1, y, x+s*0.5, y+s*0.9)
+        makeLine(x-s*0.45, y-s*0.9, x+s*0.3, y-s*0.9),
+        makeArc(x, y-s*0.35, s*0.35, -Math.PI/2, Math.PI/2),
+        makeLine(x+s*0.3, y+s*0.2, x-s*0.45, y+s*0.2)
       ),
+      makeLine(x-s*0.1, y+s*0.2, x+s*0.5, y+s*0.9),
     ];
     case 'S': {
       const p0x = x - s*0.35, p0y = y - s*0.6;
@@ -366,6 +372,15 @@ function initTrace(){
     currentLetter=lettersList.indexOf(choice); 
   }
   buildTracing(ch);
+  document.getElementById('title').textContent = `Trace: ${ch}`;
+  
+  // Reset tracing state
+  userStrokes = [];
+  currentUserStroke = [];
+  tracingCoverage = [];
+  strokeIdx = 0;
+  pointIdx = 0;
+  completedStrokes = 0;
 }
 
 // ===== draw loop
@@ -432,76 +447,217 @@ function drawTrace(){
   if(!tracingStrokes.length) return;
 
   ctx.lineCap='round'; ctx.lineJoin='round';
+  const strokeWidth = getStrokeWidth();
+  const tolerance = getTolerance();
 
-  // light guides
-  ctx.lineWidth=26*screenScale;
-  ctx.strokeStyle='rgba(200,200,200,.35)';
+  // Draw light guide paths
+  ctx.lineWidth = strokeWidth + 8;
+  ctx.strokeStyle = 'rgba(200,200,200,.3)';
   for(const pts of tracingStrokes){
     if(!pts.length) continue;
-    ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y);
-    for(let i=1;i<pts.length;i++) ctx.lineTo(pts[i].x, pts[i].y);
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, pts[0].y);
+    for(let i=1; i<pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
     ctx.stroke();
   }
 
-  // completed strokes
-  ctx.strokeStyle='#333';
-  for(let s=0; s<completedStrokes; s++){
-    const pts=tracingStrokes[s];
-    if(!pts.length) continue;
-    drawHandStroke(pts, pts.length-1);
+  // Draw coverage indicators
+  if(tracingCoverage.length === tracingStrokes.length) {
+    for(let strokeIdx = 0; strokeIdx < tracingStrokes.length; strokeIdx++) {
+      const targetStroke = tracingStrokes[strokeIdx];
+      const coverage = tracingCoverage[strokeIdx];
+      
+      for(let i = 0; i < coverage.length; i++) {
+        const pointIdx = i * SAMPLE_DISTANCE;
+        if(pointIdx >= targetStroke.length) break;
+        
+        const point = targetStroke[pointIdx];
+        ctx.fillStyle = coverage[i] ? 'rgba(76, 175, 80, 0.8)' : 'rgba(255, 87, 34, 0.4)';
+        ctx.beginPath();
+        ctx.arc(point.x, point.y, 4 * screenScale, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
   }
 
-  // current stroke
-  if(strokeIdx < tracingStrokes.length){
-    const pts = tracingStrokes[strokeIdx];
-    if(pts.length){
-      ctx.strokeStyle='#333';
-      drawHandStroke(pts, pointIdx);
-
-      // Start & end dots for current stroke only
-      ctx.fillStyle='#4CAF50';
-      ctx.beginPath(); ctx.arc(pts[0].x, pts[0].y, 10*screenScale, 0, Math.PI*2); ctx.fill();
-      ctx.fillStyle='#FF5722';
-      ctx.beginPath(); ctx.arc(pts[pts.length-1].x, pts[pts.length-1].y, 10*screenScale, 0, Math.PI*2); ctx.fill();
+  // Draw user's pen strokes
+  ctx.lineWidth = strokeWidth;
+  ctx.strokeStyle = '#2196F3';
+  for(const userStroke of userStrokes) {
+    if(userStroke.length < 2) continue;
+    ctx.beginPath();
+    ctx.moveTo(userStroke[0].x, userStroke[0].y);
+    for(let i = 1; i < userStroke.length; i++) {
+      ctx.lineTo(userStroke[i].x, userStroke[i].y);
     }
+    ctx.stroke();
+  }
+  
+  // Draw current stroke being drawn
+  if(currentUserStroke.length > 1) {
+    ctx.lineWidth = strokeWidth;
+    ctx.strokeStyle = '#1976D2';
+    ctx.beginPath();
+    ctx.moveTo(currentUserStroke[0].x, currentUserStroke[0].y);
+    for(let i = 1; i < currentUserStroke.length; i++) {
+      ctx.lineTo(currentUserStroke[i].x, currentUserStroke[i].y);
+    }
+    ctx.stroke();
+  }
+
+  // Draw start hints for uncovered strokes
+  for(let i = 0; i < tracingStrokes.length; i++) {
+    const pts = tracingStrokes[i];
+    if(!pts.length) continue;
+    
+    const coverage = tracingCoverage[i] || [];
+    const startCovered = coverage[0] || false;
+    
+    if(!startCovered) {
+      ctx.fillStyle = '#4CAF50';
+      ctx.beginPath();
+      ctx.arc(pts[0].x, pts[0].y, 8 * screenScale, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Add arrow indicating direction
+      if(pts.length > 1) {
+        const dx = pts[1].x - pts[0].x;
+        const dy = pts[1].y - pts[0].y;
+        const angle = Math.atan2(dy, dx);
+        const arrowLength = 15 * screenScale;
+        
+        ctx.strokeStyle = '#4CAF50';
+        ctx.lineWidth = 3 * screenScale;
+        ctx.beginPath();
+        ctx.moveTo(pts[0].x, pts[0].y);
+        ctx.lineTo(pts[0].x + Math.cos(angle) * arrowLength, pts[0].y + Math.sin(angle) * arrowLength);
+        ctx.stroke();
+      }
+    }
+  }
+  
+  // Draw progress indicator
+  let totalCovered = 0;
+  let totalSamples = 0;
+  for (const coverage of tracingCoverage) {
+    totalSamples += coverage.length;
+    totalCovered += coverage.filter(c => c).length;
+  }
+  const progress = totalSamples > 0 ? totalCovered / totalSamples : 0;
+  
+  if(progress > 0) {
+    const barWidth = 200 * screenScale;
+    const barHeight = 8 * screenScale;
+    const barX = window.innerWidth/2 - barWidth/2;
+    const barY = window.innerHeight - 50 * screenScale;
+    
+    // Background
+    ctx.fillStyle = 'rgba(255,255,255,0.8)';
+    ctx.fillRect(barX - 4, barY - 4, barWidth + 8, barHeight + 8);
+    ctx.fillStyle = 'rgba(200,200,200,0.5)';
+    ctx.fillRect(barX, barY, barWidth, barHeight);
+    
+    // Progress
+    ctx.fillStyle = progress >= COVERAGE_THRESHOLD ? '#4CAF50' : '#2196F3';
+    ctx.fillRect(barX, barY, barWidth * progress, barHeight);
+    
+    // Text
+    ctx.fillStyle = '#333';
+    ctx.font = `${Math.max(12, 16 * screenScale)}px system-ui, Arial`;
+    ctx.textAlign = 'center';
+    ctx.fillText(`${Math.round(progress * 100)}%`, window.innerWidth/2, barY - 8 * screenScale);
   }
 }
 
-const TOL=16, STEP=24;
+// Dynamic tolerance and step based on screen scale
+function getTolerance() {
+  return Math.max(12, Math.min(32, 20 * screenScale));
+}
 
-function advance(x,y){
-  if(!tracingStrokes.length) return;
-  if(strokeIdx >= tracingStrokes.length) return;
+function getStrokeWidth() {
+  return Math.max(8, Math.min(24, 16 * screenScale));
+}
 
-  const pts = tracingStrokes[strokeIdx];
-  if(!pts.length){ strokeIdx++; completedStrokes++; pointIdx=0; return; }
+// Coverage detection settings
+const COVERAGE_THRESHOLD = 0.7; // 70% coverage required
+const SAMPLE_DISTANCE = 8; // Distance between coverage samples
 
-  if(pointIdx===0){
-    const d0=Math.hypot(x-pts[0].x, y-pts[0].y);
-    if(d0>TOL*screenScale) return;
+// Enhanced tracing with coverage detection
+function addToUserStroke(x, y) {
+  if (currentUserStroke.length === 0 || 
+      Math.hypot(x - currentUserStroke[currentUserStroke.length - 1].x, 
+                 y - currentUserStroke[currentUserStroke.length - 1].y) > 2) {
+    currentUserStroke.push({x, y});
   }
+}
 
-  let best=-1, bd=1e9, maxI=Math.min(pts.length-1, pointIdx+STEP);
-  for(let i=pointIdx;i<=maxI;i++){
-    const p=pts[i]; const d=Math.hypot(x-p.x, y-p.y);
-    if(d<bd){ bd=d; best=i; }
+function finishUserStroke() {
+  if (currentUserStroke.length > 1) {
+    userStrokes.push([...currentUserStroke]);
+    updateCoverage();
+    currentUserStroke = [];
   }
-  if(bd<=TOL*screenScale){
-    pointIdx=Math.max(pointIdx,best);
-    if(pointIdx>=pts.length-2){
-      sClick();
-      completedStrokes++;
-      strokeIdx++;
-      pointIdx=0;
-      if(strokeIdx>=tracingStrokes.length){
-        sOK(); 
-        burst(window.innerWidth/2, window.innerHeight/2, 24); 
-        addScore(15);
-        tracingSet = (tracingSet==='numbers') ? 'letters' : 'numbers';
-        mode='count'; 
-        initCount();
+}
+
+function updateCoverage() {
+  const tolerance = getTolerance();
+  
+  // Initialize coverage if needed
+  if (tracingCoverage.length !== tracingStrokes.length) {
+    tracingCoverage = tracingStrokes.map(stroke => new Array(Math.ceil(stroke.length / SAMPLE_DISTANCE)).fill(false));
+  }
+  
+  // Check coverage for each target stroke
+  for (let strokeIdx = 0; strokeIdx < tracingStrokes.length; strokeIdx++) {
+    const targetStroke = tracingStrokes[strokeIdx];
+    if (!targetStroke.length) continue;
+    
+    const coverage = tracingCoverage[strokeIdx];
+    
+    // Sample points along the target stroke
+    for (let i = 0; i < targetStroke.length; i += SAMPLE_DISTANCE) {
+      const sampleIdx = Math.floor(i / SAMPLE_DISTANCE);
+      if (sampleIdx >= coverage.length) break;
+      
+      const targetPoint = targetStroke[i];
+      
+      // Check if any user stroke covers this point
+      for (const userStroke of userStrokes) {
+        for (const userPoint of userStroke) {
+          const distance = Math.hypot(userPoint.x - targetPoint.x, userPoint.y - targetPoint.y);
+          if (distance <= tolerance) {
+            coverage[sampleIdx] = true;
+            break;
+          }
+        }
+        if (coverage[sampleIdx]) break;
       }
     }
+  }
+  
+  checkCompletion();
+}
+
+function checkCompletion() {
+  let totalCovered = 0;
+  let totalSamples = 0;
+  
+  for (const coverage of tracingCoverage) {
+    totalSamples += coverage.length;
+    totalCovered += coverage.filter(c => c).length;
+  }
+  
+  const coverageRatio = totalSamples > 0 ? totalCovered / totalSamples : 0;
+  
+  if (coverageRatio >= COVERAGE_THRESHOLD) {
+    sOK();
+    burst(window.innerWidth/2, window.innerHeight/2, 24);
+    addScore(15);
+    setTimeout(() => {
+      tracingSet = (tracingSet==='numbers') ? 'letters' : 'numbers';
+      mode = 'count';
+      initCount();
+    }, 1000);
   }
 }
 
@@ -525,16 +681,23 @@ function down(e){
       } 
     }); 
   }
-  else if(mode==='trace'){ advance(x,y); }
+  else if(mode==='trace'){ 
+    currentUserStroke = [{x, y}];
+  }
 }
 function move(e){ 
   if(!pointerDown) return; 
   if(mode==='trace'){ 
     const {x,y}=pos(e); 
-    advance(x,y);
+    addToUserStroke(x, y);
   } 
 }
-function up(){ pointerDown=false; }
+function up(){ 
+  if(mode==='trace' && pointerDown) {
+    finishUserStroke();
+  }
+  pointerDown=false; 
+}
 
 canvas.addEventListener('mousedown',down); 
 window.addEventListener('mouseup',up); 
