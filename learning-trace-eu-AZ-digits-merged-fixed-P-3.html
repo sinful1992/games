@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover"/>
+<title>Learning Adventure — Tracing (European Style)</title>
+<style>
+  *{box-sizing:border-box;user-select:none;-webkit-user-select:none}
+  html,body{margin:0;padding:0}
+  body{height:100dvh;display:flex;align-items:center;justify-content:center;background:linear-gradient(#87CEEB,#98D98E);overflow:hidden}
+  #wrap{width:100vw;height:100dvh;background:#fff0;position:relative;overflow:hidden}
+  canvas{width:100%;height:100%;display:block;touch-action:none}
+  #scoreBox{position:absolute;top:8px;right:8px;background:linear-gradient(135deg,#fff,#ffe4b5);border-radius:14px;padding:6px 10px;font-weight:700;z-index:3;font-size:clamp(12px, 3vw, 18px)}
+  #timer{display:none}
+  #title{position:absolute;top:10px;left:50%;transform:translateX(-50%);font:700 clamp(16px,3.2vw,28px) system-ui, Arial;color:#333;z-index:2}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="title">Loading…</div>
+  <div id="scoreBox">Points: <span id="score">0</span> ⭐</div>
+  <canvas id="c"></canvas>
+</div>
+<script>
+// rAF polyfill (older Androids)
+window.requestAnimationFrame=window.requestAnimationFrame||window.webkitRequestAnimationFrame||window.mozRequestAnimationFrame||function(cb){return setTimeout(cb,16)};
+
+const canvas = document.getElementById('c'); const ctx = canvas.getContext('2d',{alpha:false});
+let screenScale = 1;
+
+function fit(){
+  const dpr=Math.max(1,window.devicePixelRatio||1); 
+  const w = Math.max(1, Math.floor(window.innerWidth * dpr));
+  const h = Math.max(1, Math.floor(window.innerHeight * dpr));
+  if(canvas.width!==w || canvas.height!==h){
+    canvas.width=w; canvas.height=h; 
+  }
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  const sx = window.innerWidth/1024;
+  const sy = window.innerHeight/768;
+  screenScale = Math.min(Math.max(Math.min(sx, sy), 0.42), 1.6);
+} 
+['resize','orientationchange','visibilitychange'].forEach(evt=>addEventListener(evt,fit,{passive:true}));
+fit();
+
+// ===== state
+let score=0; const scoreEl=document.getElementById('score');
+let mode='count'; // count | trace
+let animals=[];
+let parts=[];
+
+// TRACING (with optional pen-lifts)
+let tracingStrokes=[];   // Array<Array<{x,y}>>
+let strokeIdx=0;         // current stroke index
+let pointIdx=0;          // progress within current stroke
+let completedStrokes=0;  // number of finished strokes
+let pointerDown=false;
+let currentNumber=1, currentLetter=0, tracingSet='numbers';
+const lettersList='ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+
+// No-repeat queues
+const RECENT_LEN=3; const recentNumbers=[]; const recentLetters=[]; const recentCounts=[];
+function pushRecent(arr,v){arr.push(v); while(arr.length>RECENT_LEN) arr.shift();}
+function nextUnique(list, recent){const choices=list.filter(v=>!recent.includes(v)); if(!choices.length){recent.length=0; return list[(Math.random()*list.length)|0];} return choices[(Math.random()*choices.length)|0];}
+
+// ===== sfx / particles
+let audioContext = null;
+function ensureAudio(){ if(!audioContext){ const AC = window.AudioContext||window.webkitAudioContext; if(AC){ audioContext = new AC(); } } }
+function beep(f,d){ try{ ensureAudio(); if(!audioContext) return; const o=audioContext.createOscillator(),g=audioContext.createGain();o.type='sine';o.frequency.value=f;o.connect(g);g.connect(audioContext.destination);const t=audioContext.currentTime;g.gain.setValueAtTime(.25,t);g.gain.exponentialRampToValueAtTime(.01,t+d);o.start(t);o.stop(t+d);}catch{}}
+const sClick=()=>beep(440,.08), sOK=()=>{beep(523,.08); setTimeout(()=>beep(659,.08),80); setTimeout(()=>beep(784,.12),160);};
+
+function burst(x,y,n=10){ for(let i=0;i<n;i++){parts.push({x,y,vx:(Math.random()-.5)*7,vy:(Math.random()-.5)*7,a:1,r:Math.random()*7+4,c:`hsl(${Math.random()*360},70%,60%)`});} }
+
+// ===== counting (emoji-safe font stack)
+const EMOJI_FONT = '"Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",system-ui,Arial,sans-serif';
+class Animal{
+  constructor(x,y,e){
+    this.x=x;this.y=y;this.e=e;
+    this.s=84*screenScale;
+    this.counted=false;
+    this.b=0;
+  } 
+  draw(){
+    ctx.save();
+    ctx.translate(this.x,this.y+this.b);
+    ctx.font=`${this.s}px ${EMOJI_FONT}`;
+    ctx.textAlign='center';
+    ctx.textBaseline='middle';
+    ctx.globalAlpha=this.counted?.5:1;
+    ctx.fillText(this.e,0,0);
+    ctx.restore(); 
+    if(!this.counted) this.b=Math.sin(Date.now()/480+this.x)*7;
+  } 
+  hit(x,y){return Math.hypot(x-this.x,y-this.y)<this.s/2;}
+}
+
+function initCount(){ 
+  animals=[]; 
+  const types=['🐄','🐷','🐔','🐑','🐴','🦆','🐐','🐰']; 
+  const n=nextUnique([1,2,3,4,5,6,7,8,9,10],recentCounts); 
+  pushRecent(recentCounts,n); 
+  currentNumber=n;
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+  for(let i=0;i<n;i++){ 
+    let x,y,k=0; 
+    do{ 
+      x=Math.random()*(w-120)+60; 
+      y=Math.random()*(h-260)+140;  // leave room for title bars
+      k++; 
+    }while(k<120 && animals.some(a=>Math.hypot(a.x-x,a.y-y)<110*screenScale)); 
+    animals.push(new Animal(x,y, types[(Math.random()*types.length)|0])); 
+  }
+  document.getElementById('title').textContent = `Count ${n} animals!`;
+}
+
+// ===== path helpers
+function makeLine(x1,y1,x2,y2,seg=40){
+  const pts=[]; for(let i=0;i<=seg;i++){ const t=i/seg; pts.push({x:x1+(x2-x1)*t, y:y1+(y2-y1)*t}); } return pts;
+}
+function makeArc(cx,cy,r,a0,a1,seg=72){
+  const pts=[]; for(let i=0;i<=seg;i++){ const t=i/seg, a=a0+(a1-a0)*t; pts.push({x:cx+r*Math.cos(a), y:cy+r*Math.sin(a)});} return pts;
+}
+function concatStroke(...segs){
+  const out=[]; for(const s of segs){ if(s && s.length) out.push(...s); } return out;
+}
+function makeQ(x0,y0,cx,cy,x1,y1,seg=48){
+  const pts=[];
+  for(let i=0;i<=seg;i++){
+    const t=i/seg, mt=1-t;
+    const x=mt*mt*x0 + 2*mt*t*cx + t*t*x1;
+    const y=mt*mt*y0 + 2*mt*t*cy + t*t*y1;
+    pts.push({x,y});
+  }
+  return pts;
+}
+function eightPath(cx, cy, rt, rb){
+  const topC = {x:cx, y:cy - rt - rb*0.05};
+  const botC = {x:cx, y:cy + rb + rt*0.05};
+  const startAngle = 0;
+  const top = makeArc(topC.x, topC.y, rt, startAngle, startAngle + Math.PI*2);
+  const bot = makeArc(botC.x, botC.y, rb, startAngle, startAngle - Math.PI*2);
+  return concatStroke(top, bot);
+}
+
+// ===== glyphStrokes (original merged version) =====
+// Returns Array<Stroke>; Stroke = Array<{x,y}>
+function glyphStrokes(ch){
+  const cx=window.innerWidth/2, cy=window.innerHeight/2;
+  const s=120*screenScale;
+
+  if(typeof ch==='number'){
+    switch(ch){
+      case 0: return [ makeArc(cx,cy,s*0.7, Math.PI*1.5, Math.PI*3.5) ];
+      case 1: return [ concatStroke(
+        makeLine(cx, cy - s*1.0, cx - s*0.25, cy - s*0.8),
+        makeLine(cx, cy - s*1.0, cx, cy + s*0.85)
+      )];
+      case 2: return [ concatStroke(
+        makeArc(cx, cy-s*0.35, s*0.55, Math.PI, Math.PI*2),
+        makeLine(cx+s*0.55, cy-s*0.35, cx-s*0.55, cy+s*0.65),
+        makeLine(cx-s*0.55, cy+s*0.65, cx+s*0.55, cy+s*0.65)
+      )];
+      case 3: return [ concatStroke(
+        // Smooth single stroke with two lobes; top slightly smaller than bottom
+        makeQ(cx - s*0.45, cy - s*0.80,  cx + s*0.30, cy - s*0.80,  cx + s*0.32, cy - s*0.30, 40),
+        makeQ(cx + s*0.32, cy - s*0.30,  cx + s*0.28, cy - s*0.05,  cx,          cy - s*0.05, 26),
+        makeQ(cx,          cy - s*0.05,  cx + s*0.32, cy + s*0.10,  cx + s*0.35, cy + s*0.35, 40),
+        makeQ(cx + s*0.35, cy + s*0.35,  cx + s*0.30, cy + s*0.80,  cx - s*0.40, cy + s*0.80, 40)
+      )];
+      case 4: return [
+        makeLine(cx - s*0.5, cy - s*1.0, cx - s*0.5, cy + s*0.9),
+        makeLine(cx - s*0.5, cy - s*0.1, cx + s*0.5, cy - s*0.1),
+        makeLine(cx + s*0.5, cy - s*1.0, cx + s*0.5, cy + s*0.9),
+      ];
+      case 5: return [ concatStroke(
+        makeLine(cx - s*0.5, cy - s*1.0, cx + s*0.5, cy - s*1.0),
+        makeLine(cx - s*0.5, cy - s*1.0, cx - s*0.5, cy - s*0.1),
+        makeArc(cx, cy, s*0.55, Math.PI, Math.PI*2)
+      )];
+      case 6: return [ makeArc(cx, cy+s*0.25, s*0.65, Math.PI/3, Math.PI*2.05) ];
+      case 7: return [
+        concatStroke(
+          makeLine(cx - s*0.6, cy - s*1.0, cx + s*0.6, cy - s*1.0),
+          makeLine(cx + s*0.6, cy - s*1.0, cx - s*0.6, cy + s*0.9)
+        ),
+        makeLine(cx - s*0.4, cy - s*0.2, cx + s*0.4, cy - s*0.2),
+      ];
+      case 8: return [ eightPath(cx, cy, s*0.38, s*0.5) ];
+      case 9: return [ concatStroke(
+        makeArc(cx, cy - s*0.35, s*0.5, Math.PI*1.5, Math.PI*3.5),
+        makeLine(cx + s*0.5, cy - s*0.35, cx + s*0.5, cy + s*0.9)
+      )];
+    }
+  }
+
+  const x = cx, y = cy;
+  switch(ch){
+    case 'A': return [
+      makeLine(x, y-s*0.9, x-s*0.5, y+s*0.8),
+      makeLine(x, y-s*0.9, x+s*0.5, y+s*0.8),
+      makeLine(x-s*0.25, y - s*0.1, x+s*0.25, y - s*0.1),
+    ];
+    case 'B': return [
+      makeLine(x-s*0.45, y-s*0.9, x-s*0.45, y+s*0.9),
+      concatStroke(
+        makeArc(x-s*0.45 + s*0.35, y-s*0.35, s*0.35, Math.PI, Math.PI*2),
+        makeArc(x-s*0.45 + s*0.35, y+s*0.35, s*0.35, Math.PI, Math.PI*2)
+      ),
+    ];
+    case 'C': return [ makeArc(x, y, s*0.75, Math.PI*1.5, Math.PI*0.5) ];
+    case 'D': return [
+      makeLine(x-s*0.45, y-s*0.9, x-s*0.45, y+s*0.9),
+      makeArc(x-s*0.45 + s*0.4, y, s*0.85, Math.PI*1.5, Math.PI*0.5),
+    ];
+    case 'E': return [
+      makeLine(x-s*0.45, y-s*0.9, x-s*0.45, y+s*0.9),
+      makeLine(x-s*0.45, y-s*0.9, x+s*0.45, y-s*0.9),
+      makeLine(x-s*0.45, y, x+s*0.35, y),
+      makeLine(x-s*0.45, y+s*0.9, x+s*0.45, y+s*0.9),
+    ];
+    case 'F': return [
+      makeLine(x-s*0.45, y-s*0.9, x-s*0.45, y+s*0.9),
+      makeLine(x-s*0.45, y-s*0.9, x+s*0.45, y-s*0.9),
+      makeLine(x-s*0.45, y, x+s*0.3, y),
+    ];
+    case 'G': return [ concatStroke(
+      makeArc(x, y, s*0.75, Math.PI*1.5, Math.PI*0.35),
+      makeLine(x+s*0.53, y-s*0.05, x+s*0.2, y-s*0.05),
+      makeLine(x+s*0.2, y-s*0.05, x+s*0.2, y+s*0.3)
+    )];
+    case 'H': return [
+      makeLine(x-s*0.5, y-s*0.9, x-s*0.5, y+s*0.9),
+      makeLine(x+s*0.5, y-s*0.9, x+s*0.5, y+s*0.9),
+      makeLine(x-s*0.5, y, x+s*0.5, y),
+    ];
+    case 'I': return [
+      makeLine(x, y-s*0.9, x, y+s*0.9),
+      makeLine(x-s*0.25, y-s*0.9, x+s*0.25, y-s*0.9),
+      makeLine(x-s*0.25, y+s*0.9, x+s*0.25, y+s*0.9),
+    ];
+    case 'J': return [
+      concatStroke(
+        makeLine(x+s*0.2, y-s*0.9, x+s*0.2, y),
+        makeArc(x, y, s*0.2, 0, Math.PI, 36)
+      ),
+      makeLine(x-s*0.2, y-s*0.9, x+s*0.2, y-s*0.9),
+    ];
+    case 'K': return [
+      makeLine(x-s*0.5, y-s*0.9, x-s*0.5, y+s*0.9),
+      makeLine(x+s*0.4, y-s*0.9, x-s*0.5, y),
+      makeLine(x-s*0.5, y, x+s*0.5, y+s*0.9),
+    ];
+    case 'L': return [ concatStroke(
+      makeLine(x-s*0.5, y-s*0.9, x-s*0.5, y+s*0.9),
+      makeQ(x-s*0.5, y+s*0.9, x-s*0.3, y+s*0.9, x-s*0.2, y+s*0.9, 8),
+      makeLine(x-s*0.2, y+s*0.9, x+s*0.5, y+s*0.9)
+    )];
+    case 'M': return [
+      makeLine(x-s*0.6, y-s*0.9, x-s*0.6, y+s*0.9),
+      concatStroke(
+        makeLine(x-s*0.6, y-s*0.9, x, y+s*0.9),
+        makeLine(x, y+s*0.9, x+s*0.6, y-s*0.9),
+        makeLine(x+s*0.6, y-s*0.9, x+s*0.6, y+s*0.9)
+      ),
+    ];
+    case 'N': return [
+      makeLine(x-s*0.6, y-s*0.9, x-s*0.6, y+s*0.9),
+      concatStroke(
+        makeLine(x-s*0.6, y-s*0.9, x+s*0.6, y+s*0.9),
+        makeLine(x+s*0.6, y+s*0.9, x+s*0.6, y-s*0.9)
+      ),
+    ];
+    case 'O': return [ makeArc(x, y, s*0.8, Math.PI*1.5, Math.PI*3.5) ];
+    case 'P': return [
+      makeLine(x-s*0.45, y-s*0.9, x-s*0.45, y+s*0.9),
+      makeArc(x-s*0.45 + s*0.35, y-s*0.35, s*0.35, -Math.PI/2, Math.PI/2),
+    ];
+    case 'Q': return [
+      makeArc(x, y, s*0.8, Math.PI*1.5, Math.PI*3.5),
+      makeLine(x+s*0.2, y+s*0.4, x+s*0.5, y+s*1.0),
+    ];
+    case 'R': return [
+      makeLine(x-s*0.45, y-s*0.9, x-s*0.45, y+s*0.9),
+      concatStroke(
+        makeArc(x-s*0.45 + s*0.35, y-s*0.35, s*0.35, -Math.PI/2, Math.PI/2),
+        makeLine(x-s*0.1, y, x+s*0.5, y+s*0.9)
+      ),
+    ];
+    case 'S': {
+      const p0x = x - s*0.35, p0y = y - s*0.6;
+      const c1x = x - s*0.35, c1y = y - s*0.35;
+      const p1x = x + s*0.35, p1y = y - s*0.05;
+      const c2x = x + s*0.35, c2y = y + s*0.35;
+      const p2x = x - s*0.35, p2y = y + s*0.6;
+      return [ concatStroke(
+        makeQ(p0x,p0y, c1x,c1y, p1x,p1y, 48),
+        makeQ(p1x,p1y, c2x,c2y, p2x,p2y, 48)
+      )];
+    }
+    case 'T': return [
+      makeLine(x, y-s*0.9, x, y+s*0.9),
+      makeLine(x-s*0.6, y-s*0.9, x+s*0.6, y-s*0.9),
+    ];
+    case 'U': return [ concatStroke(
+      makeLine(x-s*0.5, y-s*0.9, x-s*0.5, y-s*0.1),
+      makeArc(x, y-s*0.1, s*0.5, Math.PI, 0),
+      makeLine(x+s*0.5, y-s*0.1, x+s*0.5, y-s*0.9)
+    )];
+    case 'V': return [ concatStroke(
+      makeLine(x-s*0.6, y-s*0.9, x, y+s*0.9),
+      makeLine(x, y+s*0.9, x+s*0.6, y-s*0.9)
+    )];
+    case 'W': return [ concatStroke(
+      makeLine(x-s*0.7, y-s*0.9, x-s*0.35, y+s*0.9),
+      makeLine(x-s*0.35, y+s*0.9, x, y-s*0.5),
+      makeLine(x, y-s*0.5, x+s*0.35, y+s*0.9),
+      makeLine(x+s*0.35, y+s*0.9, x+s*0.7, y-s*0.9)
+    )];
+    case 'X': return [
+      makeLine(x-s*0.6, y-s*0.9, x+s*0.6, y+s*0.9),
+      makeLine(x+s*0.6, y-s*0.9, x-s*0.6, y+s*0.9),
+    ];
+    case 'Y': return [
+      makeLine(x-s*0.5, y-s*0.9, x, y),
+      concatStroke(
+        makeLine(x+s*0.5, y-s*0.9, x, y),
+        makeLine(x, y, x, y+s*0.9)
+      ),
+    ];
+    case 'Z': return [ concatStroke(
+      makeLine(x-s*0.6, y-s*0.9, x+s*0.6, y-s*0.9),
+      makeLine(x+s*0.6, y-s*0.9, x-s*0.6, y+s*0.9),
+      makeLine(x-s*0.6, y+s*0.9, x+s*0.6, y+s*0.9)
+    )];
+  }
+
+  const w=s*0.8,h=s*1.0;
+  return [
+    makeLine(cx-w/2, cy-h/2, cx+w/2, cy-h/2),
+    makeLine(cx+w/2, cy-h/2, cx+w/2, cy+h/2),
+    makeLine(cx+w/2, cy+h/2, cx-w/2, cy+h/2),
+    makeLine(cx-w/2, cy+h/2, cx-w/2, cy-h/2),
+  ];
+}
+
+// ===== tracing scene control =====
+function buildTracing(ch){
+  tracingStrokes = glyphStrokes(ch);
+  strokeIdx = 0; pointIdx  = 0; completedStrokes = 0;
+  const label = typeof ch==='number' ? ch : ch;
+  document.getElementById('title').textContent = `Trace ${label}`;
+}
+
+function initTrace(){
+  let ch;
+  if(tracingSet==='numbers'){ 
+    const choice=nextUnique([0,1,2,3,4,5,6,7,8,9],recentNumbers); 
+    pushRecent(recentNumbers,choice); 
+    ch=choice; 
+    currentNumber=choice; 
+  } else { 
+    const choice=nextUnique(lettersList,recentLetters); 
+    pushRecent(recentLetters,choice); 
+    ch=choice; 
+    currentLetter=lettersList.indexOf(choice); 
+  }
+  buildTracing(ch);
+}
+
+// ===== draw loop
+function draw(){
+  const g=ctx.createLinearGradient(0,0,0,window.innerHeight); 
+  const hue=(Date.now()/60)%360;
+  g.addColorStop(0,`hsl(${hue},50%,85%)`); 
+  g.addColorStop(1,`hsl(${(hue+60)%360},50%,90%)`);
+  ctx.fillStyle=g; 
+  ctx.fillRect(0,0,window.innerWidth,window.innerHeight);
+
+  parts = parts.filter(p=>p.a>0); 
+  parts.forEach(p=>{
+    p.x+=p.vx; 
+    p.y+=p.vy; 
+    p.vy+=.25; 
+    p.a-=.02; 
+    p.r*=.985; 
+    ctx.globalAlpha=Math.max(0,p.a); 
+    ctx.fillStyle=p.c; 
+    ctx.beginPath(); 
+    ctx.arc(p.x,p.y,p.r,0,Math.PI*2); 
+    ctx.fill(); 
+    ctx.globalAlpha=1;
+  });
+
+  if(mode==='count') drawCount();
+  else if(mode==='trace') drawTrace();
+
+  requestAnimationFrame(draw);
+}
+
+function drawCount(){
+  animals.forEach(a=>a.draw());
+  const done=animals.filter(a=>a.counted).length;
+  ctx.fillStyle='#333'; 
+  ctx.font=`bold ${Math.max(18, 28*screenScale)}px system-ui, Arial, sans-serif`; 
+  ctx.textAlign='center';
+  ctx.fillText(`${done} / ${currentNumber}`, window.innerWidth/2, window.innerHeight-36*screenScale);
+  if(done===animals.length && animals.length){
+    setTimeout(()=>{ 
+      sOK(); 
+      burst(window.innerWidth/2, window.innerHeight/2, 24); 
+      addScore(10); 
+      mode='trace'; 
+      initTrace(); 
+    },180);
+  }
+}
+
+function drawHandStroke(pts, endIdx){
+  for(let i=1; i<=endIdx && i<pts.length; i++){
+    const t = i / pts.length;
+    const w = (18 + 8*Math.sin(Math.PI*t)) * screenScale;
+    ctx.lineWidth = w;
+    ctx.beginPath();
+    ctx.moveTo(pts[i-1].x, pts[i-1].y);
+    ctx.lineTo(pts[i].x, pts[i].y);
+    ctx.stroke();
+  }
+}
+
+function drawTrace(){
+  if(!tracingStrokes.length) return;
+
+  ctx.lineCap='round'; ctx.lineJoin='round';
+
+  // light guides
+  ctx.lineWidth=26*screenScale;
+  ctx.strokeStyle='rgba(200,200,200,.35)';
+  for(const pts of tracingStrokes){
+    if(!pts.length) continue;
+    ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y);
+    for(let i=1;i<pts.length;i++) ctx.lineTo(pts[i].x, pts[i].y);
+    ctx.stroke();
+  }
+
+  // completed strokes
+  ctx.strokeStyle='#333';
+  for(let s=0; s<completedStrokes; s++){
+    const pts=tracingStrokes[s];
+    if(!pts.length) continue;
+    drawHandStroke(pts, pts.length-1);
+  }
+
+  // current stroke
+  if(strokeIdx < tracingStrokes.length){
+    const pts = tracingStrokes[strokeIdx];
+    if(pts.length){
+      ctx.strokeStyle='#333';
+      drawHandStroke(pts, pointIdx);
+
+      // Start & end dots for current stroke only
+      ctx.fillStyle='#4CAF50';
+      ctx.beginPath(); ctx.arc(pts[0].x, pts[0].y, 10*screenScale, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle='#FF5722';
+      ctx.beginPath(); ctx.arc(pts[pts.length-1].x, pts[pts.length-1].y, 10*screenScale, 0, Math.PI*2); ctx.fill();
+    }
+  }
+}
+
+const TOL=16, STEP=24;
+
+function advance(x,y){
+  if(!tracingStrokes.length) return;
+  if(strokeIdx >= tracingStrokes.length) return;
+
+  const pts = tracingStrokes[strokeIdx];
+  if(!pts.length){ strokeIdx++; completedStrokes++; pointIdx=0; return; }
+
+  if(pointIdx===0){
+    const d0=Math.hypot(x-pts[0].x, y-pts[0].y);
+    if(d0>TOL*screenScale) return;
+  }
+
+  let best=-1, bd=1e9, maxI=Math.min(pts.length-1, pointIdx+STEP);
+  for(let i=pointIdx;i<=maxI;i++){
+    const p=pts[i]; const d=Math.hypot(x-p.x, y-p.y);
+    if(d<bd){ bd=d; best=i; }
+  }
+  if(bd<=TOL*screenScale){
+    pointIdx=Math.max(pointIdx,best);
+    if(pointIdx>=pts.length-2){
+      sClick();
+      completedStrokes++;
+      strokeIdx++;
+      pointIdx=0;
+      if(strokeIdx>=tracingStrokes.length){
+        sOK(); 
+        burst(window.innerWidth/2, window.innerHeight/2, 24); 
+        addScore(15);
+        tracingSet = (tracingSet==='numbers') ? 'letters' : 'numbers';
+        mode='count'; 
+        initCount();
+      }
+    }
+  }
+}
+
+// input
+function pos(e){ 
+  const t=('touches' in e)?e.touches[0]:e; 
+  const r=canvas.getBoundingClientRect(); 
+  return {x:t.clientX-r.left, y:t.clientY-r.top}; 
+}
+function down(e){ 
+  e.preventDefault(); 
+  ensureAudio();
+  const {x,y}=pos(e); 
+  pointerDown=true; 
+  if(mode==='count'){ 
+    animals.forEach(a=>{ 
+      if(!a.counted && a.hit(x,y)){ 
+        a.counted=true; 
+        sClick(); 
+        burst(x,y,6);
+      } 
+    }); 
+  }
+  else if(mode==='trace'){ advance(x,y); }
+}
+function move(e){ 
+  if(!pointerDown) return; 
+  if(mode==='trace'){ 
+    const {x,y}=pos(e); 
+    advance(x,y);
+  } 
+}
+function up(){ pointerDown=false; }
+
+canvas.addEventListener('mousedown',down); 
+window.addEventListener('mouseup',up); 
+canvas.addEventListener('mousemove',move);
+canvas.addEventListener('touchstart',down,{passive:false}); 
+window.addEventListener('touchend',up); 
+canvas.addEventListener('touchmove',move,{passive:false});
+
+function addScore(n){ score+=n; document.getElementById('score').textContent=score; }
+
+function start(){ 
+  score=0; 
+  document.getElementById('score').textContent=score; 
+  mode='count'; 
+  initCount(); 
+  draw(); 
+}
+start();
+</script>
+</body>
+</html>
