@@ -140,17 +140,15 @@ function makeQ(x0,y0,cx,cy,x1,y1,seg=48){
   return pts;
 }
 function eightPath(cx, cy, rt, rb){
-  // Create clean figure-8: two circles that touch at center
-  const topY = cy - (rt + rb) * 0.4;  // Top circle center
-  const botY = cy + (rt + rb) * 0.4;  // Bottom circle center
+  // Create simple figure-8 with two stacked circles
+  const topY = cy - rt * 0.8;  // Top circle center
+  const botY = cy + rb * 0.8;  // Bottom circle center
   
   return concatStroke(
-    // Start at top of top circle, go clockwise around top circle
-    makeArc(cx, topY, rt, -Math.PI/2, Math.PI/2),
-    // Continue clockwise around bottom circle  
-    makeArc(cx, botY, rb, Math.PI/2, -Math.PI/2),
-    // Return to start point
-    makeArc(cx, topY, rt, Math.PI/2, -Math.PI/2)
+    // Top circle - start at top, go clockwise
+    makeArc(cx, topY, rt, -Math.PI/2, Math.PI*1.5),
+    // Bottom circle - continue clockwise  
+    makeArc(cx, botY, rb, -Math.PI/2, Math.PI*1.5)
   );
 }
 
@@ -196,16 +194,15 @@ function glyphStrokes(ch){
         makeLine(cx + s*0.5, cy - s*1.0, cx + s*0.5, cy + s*0.9),
       ];
       case 5: return [ concatStroke(
-        // Start at top left, go down
+        // Start with vertical line down
         makeLine(cx - s*0.4, cy - s*0.9, cx - s*0.4, cy - s*0.1),
-        // Horizontal line at top  
+        // Top horizontal line
         makeLine(cx - s*0.4, cy - s*0.9, cx + s*0.4, cy - s*0.9),
-        // Horizontal line at middle
-        makeLine(cx - s*0.4, cy - s*0.1, cx + s*0.2, cy - s*0.1),
-        // Bottom right curve
-        makeArc(cx + s*0.2, cy + s*0.3, s*0.4, -Math.PI/2, Math.PI/2),
-        // Bottom line back to left
-        makeLine(cx + s*0.2, cy + s*0.7, cx - s*0.3, cy + s*0.7)
+        // Middle horizontal platform
+        makeLine(cx - s*0.4, cy - s*0.1, cx + s*0.25, cy - s*0.1),
+        // Bottom curve (C-shape)
+        makeArc(cx + s*0.25, cy + s*0.25, s*0.35, -Math.PI/2, 0),
+        makeArc(cx + s*0.25, cy + s*0.25, s*0.35, 0, Math.PI/2)
       )];
       case 6: return [ concatStroke(
         // Start at top, curve down and spiral into bottom loop
