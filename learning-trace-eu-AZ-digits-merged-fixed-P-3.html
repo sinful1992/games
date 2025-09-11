@@ -140,20 +140,17 @@ function makeQ(x0,y0,cx,cy,x1,y1,seg=48){
   return pts;
 }
 function eightPath(cx, cy, rt, rb){
-  // Create a proper figure-8 with smooth connections
-  const topY = cy - rt - rb*0.1;
-  const botY = cy + rb + rt*0.1;
-  const crossY = cy;
+  // Create clean figure-8: two circles that touch at center
+  const topY = cy - (rt + rb) * 0.4;  // Top circle center
+  const botY = cy + (rt + rb) * 0.4;  // Bottom circle center
   
   return concatStroke(
-    // Start at top center, go around top circle
-    makeArc(cx, topY, rt, -Math.PI/2, Math.PI*1.5),
-    // Connect to bottom circle at crossing point
-    makeLine(cx + rt, topY, cx - rb, botY),
-    // Go around bottom circle
-    makeArc(cx, botY, rb, Math.PI/2, -Math.PI*1.5),
-    // Return to start
-    makeLine(cx - rb, botY, cx, topY - rt)
+    // Start at top of top circle, go clockwise around top circle
+    makeArc(cx, topY, rt, -Math.PI/2, Math.PI/2),
+    // Continue clockwise around bottom circle  
+    makeArc(cx, botY, rb, Math.PI/2, -Math.PI/2),
+    // Return to start point
+    makeArc(cx, topY, rt, Math.PI/2, -Math.PI/2)
   );
 }
 
