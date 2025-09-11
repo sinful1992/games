@@ -193,11 +193,25 @@ function glyphStrokes(ch){
         makeLine(cx + s*0.5, cy - s*1.0, cx + s*0.5, cy + s*0.9),
       ];
       case 5: return [ concatStroke(
-        makeLine(cx - s*0.5, cy - s*1.0, cx + s*0.5, cy - s*1.0),
-        makeLine(cx - s*0.5, cy - s*1.0, cx - s*0.5, cy - s*0.1),
-        makeArc(cx, cy, s*0.55, Math.PI, Math.PI*2)
+        // Start at top left, go down
+        makeLine(cx - s*0.4, cy - s*0.9, cx - s*0.4, cy - s*0.1),
+        // Horizontal line at top  
+        makeLine(cx - s*0.4, cy - s*0.9, cx + s*0.4, cy - s*0.9),
+        // Horizontal line at middle
+        makeLine(cx - s*0.4, cy - s*0.1, cx + s*0.2, cy - s*0.1),
+        // Bottom right curve
+        makeArc(cx + s*0.2, cy + s*0.3, s*0.4, -Math.PI/2, Math.PI/2),
+        // Bottom line back to left
+        makeLine(cx + s*0.2, cy + s*0.7, cx - s*0.3, cy + s*0.7)
       )];
-      case 6: return [ makeArc(cx, cy+s*0.25, s*0.65, Math.PI/3, Math.PI*2.05) ];
+      case 6: return [ concatStroke(
+        // Start at top right, curve down and around
+        makeLine(cx + s*0.3, cy - s*0.8, cx - s*0.2, cy - s*0.5),
+        // Large lower circle
+        makeArc(cx, cy + s*0.1, s*0.5, Math.PI*1.3, Math.PI*2.7),
+        // Connect back up to create the 6 shape
+        makeLine(cx + s*0.5, cy + s*0.1, cx + s*0.2, cy - s*0.2)
+      )];
       case 7: return [
         makeLine(cx - s*0.5, cy - s*1.0, cx + s*0.5, cy - s*1.0),
         makeLine(cx + s*0.5, cy - s*1.0, cx - s*0.3, cy + s*0.9),
