@@ -160,13 +160,10 @@ function glyphStrokes(ch){
 
   if(typeof ch==='number'){
     switch(ch){
-      case 0: return [ concatStroke(
-        // Create more oval/elongated shape for number 0
-        makeArc(cx, cy-s*0.2, s*0.5, Math.PI, Math.PI*1.5),  // top left
-        makeArc(cx, cy-s*0.2, s*0.5, Math.PI*1.5, 0),        // top right  
-        makeArc(cx, cy+s*0.2, s*0.5, 0, Math.PI*0.5),        // bottom right
-        makeArc(cx, cy+s*0.2, s*0.5, Math.PI*0.5, Math.PI)   // bottom left
-      )];
+      case 0: return [
+        // Simple circular zero starting at the top
+        makeArc(cx, cy, s*0.5, Math.PI*0.5, Math.PI*2.5)
+      ];
       case 1: return [ concatStroke(
         makeLine(cx, cy - s*1.0, cx - s*0.25, cy - s*0.8),
         makeLine(cx, cy - s*1.0, cx, cy + s*0.85)
@@ -205,14 +202,16 @@ function glyphStrokes(ch){
         makeArc(cx + s*0.25, cy + s*0.25, s*0.35, 0, Math.PI/2)
       )];
       case 6: return [ concatStroke(
-        // Start at top, curve down and spiral into bottom loop
-        makeArc(cx, cy - s*0.3, s*0.6, Math.PI*1.8, Math.PI*2.5),
-        // Continue the spiral into the main circle
-        makeArc(cx, cy + s*0.2, s*0.45, Math.PI*1.5, Math.PI*3.5)
+        // Main loop of the six
+        makeArc(cx, cy + s*0.2, s*0.5, Math.PI*1.5, Math.PI*3.5),
+        // Hook back toward the top
+        makeArc(cx, cy - s*0.4, s*0.3, Math.PI*0.1, Math.PI)
       )];
       case 7: return [
         makeLine(cx - s*0.5, cy - s*1.0, cx + s*0.5, cy - s*1.0),
         makeLine(cx + s*0.5, cy - s*1.0, cx - s*0.3, cy + s*0.9),
+        // Handle bar through the seven
+        makeLine(cx - s*0.3, cy - s*0.2, cx + s*0.3, cy - s*0.2)
       ];
       case 8: return [ eightPath(cx, cy, s*0.38, s*0.5) ];
       case 9: return [ concatStroke(
@@ -244,7 +243,10 @@ function glyphStrokes(ch){
       // Bottom horizontal line
       makeLine(x+s*0.3, y+s*0.6, x-s*0.45, y+s*0.9)
     )];
-    case 'C': return [ makeArc(x, y, s*0.7, Math.PI*0.75, Math.PI*1.25) ];
+    case 'C': return [ 
+      // Open to the right, starting near the top and sweeping counter-clockwise
+      makeArc(x, y, s*0.7, Math.PI*0.25, Math.PI*1.75) 
+    ];
     case 'D': return [
       concatStroke(
         makeLine(x-s*0.45, y-s*0.9, x-s*0.45, y+s*0.9),
